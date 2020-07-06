@@ -40,6 +40,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="ContainerPacking\Container.cs" />
     <Compile Include="ContainerPacking\DimHolder.cs" />
     <Compile Include="ContainerPacking\EB_AFIT.cs" />
     <Compile Include="ContainerPacking\Helper.cs" />
