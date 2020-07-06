@@ -42,8 +42,9 @@ namespace Weighted_EB_AFIT
                         itemsToPack.Add(item);
                     }
 
-                    List<Vector3> containers = new List<Vector3>();
-                    containers.Add(new Vector3(Convert.ToDouble(containerDims[0]), Convert.ToDouble(containerDims[1]), Convert.ToDouble(containerDims[2])));
+                    List<Container> containers = new List<Container>();
+                    var containerSize = new Vector3(Convert.ToDouble(containerDims[0]), Convert.ToDouble(containerDims[1]), Convert.ToDouble(containerDims[2]));
+                    containers.Add(new Container(string.Intern(containerSize.ToString()), containerSize));
                     var result = containers.Select((x) => { Console.WriteLine($"{counter}/{700}"); return EB_AFIT.Run(x, itemsToPack.ToArray()); }).ToArray();
 
                     // Assert that the number of items we tried to pack equals the number stated in the published reference.

@@ -3,9 +3,9 @@
 
     public class PackingResult
     {
+        public Container Container;
         public Item[] PackedItems;
         public Item[] UnpackedItems;
-        public Vector3 Size;
         public double Weight;
     }
 }

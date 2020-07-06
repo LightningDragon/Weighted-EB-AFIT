@@ -8,14 +8,14 @@ namespace ContainerPacking
     {
         #region Public Methods
 
-        public static PackingResult Run(Vector3 container, Item[] itemsToPack, double dimFactor = 1)
+        public static PackingResult Run(Container container, IEnumerable<Item> itemsToPack, double dimFactor = 1)
         {
             var items = itemsToPack.Select(x => new Item(x.Id, x.Dimensions, x.Quantity, x.Weight)).ToArray();
             var itemsPackedInOrder = ExecuteIterations(container, items, dimFactor);
 
             return new PackingResult
             {
-                Size = container,
+                Container = container,
                 UnpackedItems = items.Where(x => x.Quantity > 0).SelectMany(x => Enumerable.Range(0, x.Quantity).Select(y => new Item(x.Id, x.Dimensions, 1, x.Weight))).ToArray(),
                 PackedItems = itemsPackedInOrder.ToArray(),
                 Weight = itemsPackedInOrder.Sum(x => x.Weight),
@@ -26,7 +26,7 @@ namespace ContainerPacking
 
         #region Private Methods
 
-        private static Item[] ExecuteIterations(Vector3 container, Item[] items, double dimFactor)
+        private static Item[] ExecuteIterations(Container container, Item[] items, double dimFactor)
         {
             var hundredPercentPacked = false;
             var bestVolume = 0.0;
@@ -36,15 +36,15 @@ namespace ContainerPacking
 
             var orientations = new[]
             {
-                new Vector3(container.X, container.Z, container.Y),
-                new Vector3(container.Y, container.Z, container.X),
-                new Vector3(container.Y, container.X, container.Z),
-                new Vector3(container.Z, container.X, container.Y),
+                new Container(container.Id, new Vector3(container.Dimensions.X, container.Dimensions.Z, container.Dimensions.Y), container.MaximumWeight),
+                new Container(container.Id, new Vector3(container.Dimensions.Y, container.Dimensions.Z, container.Dimensions.X), container.MaximumWeight),
+                new Container(container.Id, new Vector3(container.Dimensions.Y, container.Dimensions.X, container.Dimensions.Z), container.MaximumWeight),
+                new Container(container.Id, new Vector3(container.Dimensions.Z, container.Dimensions.X, container.Dimensions.Y), container.MaximumWeight),
                 container,
-                new Vector3(container.Z, container.Y, container.X)
+                new Container(container.Id, new Vector3(container.Dimensions.Z, container.Dimensions.Y, container.Dimensions.X), container.MaximumWeight)
             };
 
-            for (int o = container.X == container.Z && container.Z == container.Y ? 5 : 0; o < 6 && !hundredPercentPacked; o++)
+            for (int o = container.Dimensions.X == container.Dimensions.Z && container.Dimensions.Z == container.Dimensions.Y ? 5 : 0; o < 6 && !hundredPercentPacked; o++)
             {
                 var box = orientations[o];
 
@@ -75,7 +75,7 @@ namespace ContainerPacking
             return new Item[] { };
         }
 
-        private static Layer[] ListCanditLayers(Vector3 box, Item[] items)
+        private static Layer[] ListCanditLayers(Container container, Item[] items)
         {
             var layers = new List<Layer>();
 
@@ -90,7 +90,7 @@ namespace ContainerPacking
 
                 foreach (var itemDimensions in itemOrientations)
                 {
-                    if (!(itemDimensions.X > box.Y) && (!(itemDimensions.Y > box.X) && !(itemDimensions.Z > box.Z) || !(itemDimensions.Z > box.X) && !(itemDimensions.Y > box.Z)))
+                    if (!(itemDimensions.X > container.Dimensions.Y) && (!(itemDimensions.Y > container.Dimensions.X) && !(itemDimensions.Z > container.Dimensions.Z) || !(itemDimensions.Z > container.Dimensions.X) && !(itemDimensions.Y > container.Dimensions.Z)))
                     {
                         if (!layers.Any(j => j.LayerDimension == itemDimensions.X))
                         {
@@ -116,7 +116,7 @@ namespace ContainerPacking
                                 }
                             }
 
-                            layers.Add(new Layer { LayerEval = layereval, LayerDimension = itemDimensions.X, Thickness = itemDimensions.X, RemainingY = box.Y, RemainingZ = box.Z });
+                            layers.Add(new Layer { LayerEval = layereval, LayerDimension = itemDimensions.X, Thickness = itemDimensions.X, RemainingY = container.Dimensions.Y, RemainingZ = container.Dimensions.Z });
                         }
                     }
                 }
@@ -125,10 +125,10 @@ namespace ContainerPacking
             return layers.OrderBy(l => l.LayerEval).ToArray();
         }
 
-        private static void Report(Layer layer, Vector3 box, Item[] items, double totalItemVolume, double dimFactor)
+        private static void Report(Layer layer, Container container, Item[] items, double totalItemVolume, double dimFactor)
         {
             //ListCanditLayers(box, items);
-            layer.Pack(box, items, true, totalItemVolume, dimFactor);
+            layer.Pack(container, items, true, totalItemVolume, dimFactor);
         }
 
         #endregion Private Methods
@@ -166,15 +166,15 @@ namespace ContainerPacking
             public double PreviousPackedY;
             public double PreviousRemainingY;
 
-            public void Pack(Vector3 box, Item[] items, bool packingBest, double totalItemVolume, double dimFactor)
+            public void Pack(Container container, Item[] items, bool packingBest, double totalItemVolume, double dimFactor)
             {
-                DimensionalWeight = new Vector3(Math.Round(box.X), Math.Round(box.Y), Math.Round(box.Z)).Volume / dimFactor;
+                DimensionalWeight = new Vector3(Math.Round(container.Dimensions.X), Math.Round(container.Dimensions.Y), Math.Round(container.Dimensions.Z)).Volume / dimFactor;
                 Weight = 0;
                 Volume = 0;
                 PackedY = 0;
                 Thickness = LayerDimension;
-                RemainingY = box.Y;
-                RemainingZ = box.Z;
+                RemainingY = container.Dimensions.Y;
+                RemainingZ = container.Dimensions.Z;
                 DonePacking = false;
 
 
@@ -184,10 +184,10 @@ namespace ContainerPacking
                 {
                     LayerInLayer = 0;
 
-                    PackLayer(box, itemDims, packingBest, totalItemVolume);
+                    PackLayer(container, itemDims, packingBest, totalItemVolume);
 
                     PackedY = PackedY + Thickness;
-                    RemainingY = box.Y - PackedY;
+                    RemainingY = container.Dimensions.Y - PackedY;
 
                     if (LayerInLayer != 0)
                     {
@@ -198,23 +198,24 @@ namespace ContainerPacking
                         RemainingZ = LilZ;
                         Thickness = LayerInLayer;
 
-                        PackLayer(box, itemDims, packingBest, totalItemVolume);
+                        PackLayer(container, itemDims, packingBest, totalItemVolume);
 
                         PackedY = PreviousPackedY;
                         RemainingY = PreviousRemainingY;
-                        RemainingZ = box.Z;
+                        RemainingZ = container.Dimensions.Z;
                     }
 
-                    Thickness = Find(box, items);
+                    Thickness = Find(container, items);
                 }
             }
 
-            public void PackLayer(Vector3 box, DimHolder[] items, bool packingBest, double totalItemVolume)
+            public void PackLayer(Container container, DimHolder[] items, bool packingBest, double totalItemVolume)
             {
                 Done = false;
-                var totalVector3Volume = box.Volume;
+                var totalVector3Volume = container.Volume;
+                var maximumWeight = container.MaximumWeight;
                 SmallestZList = new LinkedList<Pad>();
-                SmallestZList.AddFirst(new Pad { CumX = box.X, CumZ = 0 });
+                SmallestZList.AddFirst(new Pad { CumX = container.Dimensions.X, CumZ = 0 });
 
                 if (Thickness > 0)
                 {
@@ -229,7 +230,8 @@ namespace ContainerPacking
 
                             var gapX = SmallestZ.Value.CumX;
                             var gapZStart = RemainingZ - SmallestZ.Value.CumZ;
-                            item = FindBox(new Vector3(gapX, RemainingY, gapZStart), gapZStart, items);
+                            var gapWeight = container.MaximumWeight - Weight;
+                            item = FindBox(new Vector3(gapX, RemainingY, gapZStart), gapZStart, gapWeight, items);
 
                             if (item != null)
                             {
@@ -257,7 +259,8 @@ namespace ContainerPacking
                                 var gapX = SmallestZ.Value.CumX;
                                 var gapZStart = SmallestZ.Next.Value.CumZ - SmallestZ.Value.CumZ;
                                 var gapZ = RemainingZ - SmallestZ.Value.CumZ;
-                                item = FindBox(new Vector3(gapX, RemainingY, gapZ), gapZStart, items);
+                                var gapWeight = container.MaximumWeight - Weight;
+                                item = FindBox(new Vector3(gapX, RemainingY, gapZ), gapZStart, gapWeight, items);
 
                                 if (item != null)
                                 {
@@ -304,7 +307,8 @@ namespace ContainerPacking
                                 var gapX = SmallestZ.Value.CumX - SmallestZ.Previous.Value.CumX;
                                 var gapZStart = SmallestZ.Previous.Value.CumZ - SmallestZ.Value.CumZ;
                                 var gapZ = RemainingZ - SmallestZ.Value.CumZ;
-                                item = FindBox(new Vector3(gapX, RemainingY, gapZ), gapZStart, items);
+                                var gapWeight = container.MaximumWeight - Weight;
+                                item = FindBox(new Vector3(gapX, RemainingY, gapZ), gapZStart, gapWeight, items);
 
                                 if (item != null)
                                 {
@@ -349,7 +353,8 @@ namespace ContainerPacking
                                 var gapX = SmallestZ.Value.CumX - SmallestZ.Previous.Value.CumX;
                                 var gapZStart = SmallestZ.Previous.Value.CumZ - SmallestZ.Value.CumZ;
                                 var gapZ = RemainingZ - SmallestZ.Value.CumZ;
-                                item = FindBox(new Vector3(gapX, RemainingY, gapZ), gapZStart, items);
+                                var gapWeight = container.MaximumWeight - Weight;
+                                item = FindBox(new Vector3(gapX, RemainingY, gapZ), gapZStart, gapWeight, items);
 
                                 if (item != null)
                                 {
@@ -378,7 +383,7 @@ namespace ContainerPacking
                                             SmallestZ.Value.CumZ = SmallestZ.Value.CumZ + _cbox.Z;
                                         }
                                     }
-                                    else if (SmallestZ.Previous.Value.CumX < box.X - SmallestZ.Value.CumX)
+                                    else if (SmallestZ.Previous.Value.CumX < container.Dimensions.X - SmallestZ.Value.CumX)
                                     {
                                         if (SmallestZ.Value.CumZ + _cbox.Z == SmallestZ.Previous.Value.CumZ)
                                         {
@@ -419,7 +424,8 @@ namespace ContainerPacking
                                 var gapX = SmallestZ.Value.CumX - SmallestZ.Previous.Value.CumX;
                                 var gapZStart = SmallestZ.Previous.Value.CumZ - SmallestZ.Value.CumZ;
                                 var gapZ = RemainingZ - SmallestZ.Value.CumZ;
-                                item = FindBox(new Vector3(gapX, RemainingY, gapZ), gapZStart, items);
+                                var gapWeight = container.MaximumWeight - Weight;
+                                item = FindBox(new Vector3(gapX, RemainingY, gapZ), gapZStart, gapWeight, items);
 
                                 if (item != null)
                                 {
@@ -466,7 +472,7 @@ namespace ContainerPacking
                         if (item != null)
                         {
                             item.Quantity -= 1;
-                            var itemToPack = VolumeCheck(new Item(item.Id, item.Dimensions, 1, item.Weight), totalVector3Volume, totalItemVolume);
+                            var itemToPack = VolumeAndWeightCheck(new Item(item.Id, item.Dimensions, 1, item.Weight), totalVector3Volume, totalItemVolume, maximumWeight);
 
                             if (packingBest)
                             {
@@ -500,7 +506,7 @@ namespace ContainerPacking
                 return smallestZ;
             }
 
-            private Item FindBox(Vector3 gap, double gapZStart, DimHolder[] items)
+            private Item FindBox(Vector3 gap, double gapZStart, double gapWeight, DimHolder[] items)
             {
                 Item boxi = null;
                 Item bboxi = null;
@@ -511,7 +517,7 @@ namespace ContainerPacking
                     var newSize = 0;
                     foreach (var x in items)
                     {
-                        if (x.Item.Quantity > 0 && x.Dims.Fits(gap) && x.Dims.Y <= Thickness)
+                        if (x.Item.Quantity > 0 && x.Dims.Fits(gap) && x.Dims.Y <= Thickness && x.Item.Weight < gapWeight)
                         {
                             candidatesThatFit[newSize++] = x;
                         }
@@ -542,7 +548,7 @@ namespace ContainerPacking
                     var newSize = 0;
                     foreach (var x in items)
                     {
-                        if (x.Item.Quantity > 0 && x.Dims.Fits(gap) && !(x.Dims.Y <= Thickness))
+                        if (x.Item.Quantity > 0 && x.Dims.Fits(gap) && !(x.Dims.Y <= Thickness) && !(x.Item.Weight < gapWeight))
                         {
                             candidatesThatDoNotFit[newSize++] = x;
                         }
@@ -639,13 +645,13 @@ namespace ContainerPacking
                 return item;
             }
 
-            private Item VolumeCheck(Item item, double totalVector3Volume, double totalItemVolume)
+            private Item VolumeAndWeightCheck(Item item, double totalVector3Volume, double totalItemVolume, double maximumWeight)
             {
                 item.PackedDimensions = _cbox;
                 Volume += item.Volume;
                 Weight += item.Weight;
 
-                if (Volume == totalVector3Volume || Volume == totalItemVolume)
+                if (Volume == totalVector3Volume || Volume == totalItemVolume || Weight == maximumWeight)
                 {
                     DonePacking = true;
                 }
@@ -712,7 +718,7 @@ namespace ContainerPacking
                 return item;
             }
 
-            public double Find(Vector3 box, Item[] items)
+            public double Find(Container container, Item[] items)
             {
                 //double eval = 8388608;
                 double eval = double.MaxValue;
@@ -732,7 +738,7 @@ namespace ContainerPacking
                     {
                         double layereval = 0;
 
-                        if (itemDimensions.X <= RemainingY && (itemDimensions.Y <= box.X && itemDimensions.Z <= box.Z || itemDimensions.Z <= box.X && itemDimensions.Y <= box.Z))
+                        if (itemDimensions.X <= RemainingY && (itemDimensions.Y <= container.Dimensions.X && itemDimensions.Z <= container.Dimensions.Z || itemDimensions.Z <= container.Dimensions.X && itemDimensions.Y <= container.Dimensions.Z))
                         {
                             for (int iX = 0; iX < itemX.Quantity; iX++)
                             {
